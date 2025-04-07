@@ -1,0 +1,119 @@
+<%- include('../partials/header') %>
+
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h1>Payment Checkout</h1>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Booking Summary -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Booking Summary</h5>
+                    <h6 class="card-subtitle mb-3 text-muted"><%= booking.Bus.busNumber %></h6>
+                    
+                    <div class="mb-3">
+                        <p><strong>From:</strong> <%= booking.Bus.source %></p>
+                        <p><strong>To:</strong> <%= booking.Bus.destination %></p>
+                        <p><strong>Departure:</strong> <%= new Date(booking.Bus.departureTime).toLocaleString() %></p>
+                        <p><strong>Arrival:</strong> <%= new Date(booking.Bus.arrivalTime).toLocaleString() %></p>
+                    </div>
+
+                    <div class="mb-3">
+                        <p><strong>Seats:</strong> <%= JSON.parse(booking.seats).join(', ') %></p>
+                        <p><strong>Total Amount:</strong> ₹<%= booking.totalAmount %></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Passenger Details -->
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Passenger Details</h5>
+                    <% const passengers = JSON.parse(booking.passengerDetails); %>
+                    <% passengers.forEach((passenger, index) => { %>
+                        <div class="mb-3">
+                            <h6>Passenger <%= index + 1 %></h6>
+                            <p class="mb-1"><strong>Name:</strong> <%= passenger.name %></p>
+                            <p class="mb-1"><strong>Age:</strong> <%= passenger.age %></p>
+                            <p class="mb-1"><strong>Gender:</strong> <%= passenger.gender %></p>
+                            <p class="mb-1"><strong>Seat:</strong> <%= passenger.seatNumber %></p>
+                        </div>
+                        <% if (index < passengers.length - 1) { %>
+                            <hr>
+                        <% } %>
+                    <% }) %>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment Form -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Payment Details</h5>
+                    <button id="rzp-button" class="btn btn-primary btn-lg w-100">Pay ₹<%= booking.totalAmount %></button>
+                    <a href="/bookings/<%= booking.id %>" class="btn btn-secondary btn-lg w-100 mt-2">Cancel</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const options = {
+        key: '<%= razorpayKeyId %>',
+        amount: <%= order.amount %>,
+        currency: '<%= order.currency %>',
+        name: 'Bus Booking System',
+        description: 'Bus Ticket Booking',
+        order_id: '<%= order.id %>',
+        handler: function(response) {
+            // Handle successful payment
+            fetch('/payments/process/<%= booking.id %>', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_signature: response.razorpay_signature
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/bookings/<%= booking.id %>?payment=success';
+                } else {
+                    alert('Payment verification failed. Please contact support.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while processing your payment. Please try again.');
+            });
+        },
+        prefill: {
+            name: '<%= JSON.parse(booking.passengerDetails)[0].name %>',
+            email: '<%= booking.User.email %>'
+        },
+        theme: {
+            color: '#007bff'
+        }
+    };
+
+    const rzp = new Razorpay(options);
+    document.getElementById('rzp-button').onclick = function(e) {
+        rzp.open();
+        e.preventDefault();
+    }
+});
+</script>
+
+<%- include('../partials/footer') %> 

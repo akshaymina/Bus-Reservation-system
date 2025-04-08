@@ -191,70 +191,74 @@
 }
 </style>
 
-<script type="text/template">
-document.addEventListener('DOMContentLoaded', function() {
+<script>
+$(document).ready(function() {
     const selectedSeats = new Set();
-    const container = document.querySelector('.container');
-    const baseFare = parseFloat(container.dataset.busFare);
-    const seatLayout = JSON.parse(container.dataset.seatLayout);
-    const maxPassengers = parseInt(container.dataset.maxPassengers);
+    const container = $('.container');
+    const baseFare = parseFloat(container.data('busFare'));
+    const seatLayout = JSON.parse(container.data('seatLayout'));
+    const maxPassengers = parseInt(container.data('maxPassengers'));
 
     // Initialize tooltips
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
+    $('[data-bs-toggle="tooltip"]').tooltip();
 
     // Handle seat selection
-    document.querySelectorAll('.seat.available').forEach(seat => {
-        seat.addEventListener('click', function() {
-            const seatNumber = this.dataset.seatNumber;
-            if (selectedSeats.has(seatNumber)) {
-                selectedSeats.delete(seatNumber);
-                this.classList.remove('selected');
-            } else {
-                if (selectedSeats.size < maxPassengers) {
-                    selectedSeats.add(seatNumber);
-                    this.classList.add('selected');
-                } else {
-                    alert(`You can only select ${maxPassengers} seats`);
-                }
-            }
-            updateSelectedSeats();
-            updatePassengerForms();
-        });
+    $('.seat').not('.booked').on('click', function() {
+        const seatNumber = $(this).data('seatNumber');
+        
+        if ($(this).hasClass('selected')) {
+            // Deselect seat
+            $(this).removeClass('selected').addClass('available');
+            selectedSeats.delete(seatNumber);
+        } else if (selectedSeats.size < maxPassengers) {
+            // Select seat
+            $(this).removeClass('available').addClass('selected');
+            selectedSeats.add(seatNumber);
+        } else {
+            alert(`You can only select ${maxPassengers} seat(s)`);
+            return;
+        }
+        
+        updateUI();
     });
 
-    function updateSelectedSeats() {
+    function updateUI() {
+        // Update seat count and total amount
         const count = selectedSeats.size;
-        document.getElementById('selectedSeatsCount').textContent = count;
-        document.getElementById('totalAmount').textContent = count * baseFare;
-        document.getElementById('selectedSeats').value = JSON.stringify([...selectedSeats]);
-        document.getElementById('submitBooking').disabled = count === 0;
+        $('#selectedSeatsCount').text(count);
+        $('#totalAmount').text((count * baseFare).toLocaleString('en-IN'));
+        
+        // Update hidden input for form submission
+        $('#selectedSeats').val(JSON.stringify(Array.from(selectedSeats)));
+        
+        // Enable/disable submit button based on selection
+        $('#submitBooking').prop('disabled', count === 0 || count !== maxPassengers);
+
+        // Update passenger forms
+        updatePassengerForms();
     }
 
     function updatePassengerForms() {
-        const container = document.getElementById('passengerForms');
-        container.innerHTML = '';
+        const container = $('#passengerForms');
+        container.empty();
         
-        [...selectedSeats].forEach((seatNumber, index) => {
-            const form = document.createElement('div');
-            form.className = 'card mb-3';
-            form.innerHTML = `
+        Array.from(selectedSeats).forEach((seatNumber, index) => {
+            const form = $('<div>').addClass('card mb-3');
+            form.html(`
                 <div class="card-body">
                     <h6 class="card-title">Passenger ${index + 1} - Seat ${seatNumber}</h6>
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">Name</label>
-                            <input type="text" class="form-control" name="passengerName${index}" required>
+                            <input type="text" class="form-control passenger-name" data-seat="${seatNumber}" required>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Age</label>
-                            <input type="number" class="form-control" name="passengerAge${index}" min="1" max="120" required>
+                            <input type="number" class="form-control passenger-age" data-seat="${seatNumber}" min="1" max="120" required>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Gender</label>
-                            <select class="form-select" name="passengerGender${index}" required>
+                            <select class="form-select passenger-gender" data-seat="${seatNumber}" required>
                                 <option value="">Select gender</option>
                                 <option value="male">Male</option>
                                 <option value="female">Female</option>
@@ -263,34 +267,35 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Phone</label>
-                            <input type="tel" class="form-control" name="passengerPhone${index}" required>
+                            <input type="tel" class="form-control passenger-phone" data-seat="${seatNumber}" required>
                         </div>
                     </div>
                 </div>
-            `;
-            container.appendChild(form);
+            `);
+            container.append(form);
         });
-
-        // Update passenger details hidden input
-        document.getElementById('passengerDetails').value = JSON.stringify(
-            [...selectedSeats].map((seatNumber, index) => ({
-                seatNumber: parseInt(seatNumber),
-                name: document.querySelector(`[name="passengerName${index}"]`)?.value || '',
-                age: document.querySelector(`[name="passengerAge${index}"]`)?.value || '',
-                gender: document.querySelector(`[name="passengerGender${index}"]`)?.value || '',
-                phone: document.querySelector(`[name="passengerPhone${index}"]`)?.value || ''
-            }))
-        );
     }
 
-    // Form validation
-    const form = document.getElementById('bookingForm');
-    form.addEventListener('submit', function(event) {
-        if (!form.checkValidity()) {
-            event.preventDefault();
-            event.stopPropagation();
+    // Form submission handler
+    $('#bookingForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        if (selectedSeats.size !== maxPassengers) {
+            alert(`Please select exactly ${maxPassengers} seat(s)`);
+            return;
         }
-        form.classList.add('was-validated');
+
+        // Gather passenger details
+        const passengerDetails = Array.from(selectedSeats).map(seatNumber => ({
+            seatNumber: parseInt(seatNumber),
+            name: $(`.passenger-name[data-seat="${seatNumber}"]`).val(),
+            age: parseInt($(`.passenger-age[data-seat="${seatNumber}"]`).val()),
+            gender: $(`.passenger-gender[data-seat="${seatNumber}"]`).val(),
+            phone: $(`.passenger-phone[data-seat="${seatNumber}"]`).val()
+        }));
+
+        $('#passengerDetails').val(JSON.stringify(passengerDetails));
+        this.submit();
     });
 });
 </script>

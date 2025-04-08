@@ -27,8 +27,8 @@ exports.getAllBookings = async (req, res) => {
         const { count, rows: bookings } = await Booking.findAndCountAll({
             where,
             include: [
-                { model: Bus, attributes: ['busNumber', 'source', 'destination', 'departureTime', 'arrivalTime'] },
-                { model: User, attributes: ['name', 'email'] }
+                { model: Bus, as: 'bus', attributes: ['busNumber', 'source', 'destination', 'departureTime', 'arrivalTime'] },
+                { model: User, as: 'user', attributes: ['firstName', 'lastName', 'email'] }
             ],
             order: [['createdAt', 'DESC']],
             limit: parseInt(limit),
@@ -36,10 +36,12 @@ exports.getAllBookings = async (req, res) => {
         });
 
         res.render('bookings/index', {
+            title: 'My Bookings',
             bookings,
             currentPage: parseInt(page),
             totalPages: Math.ceil(count / limit),
-            filters: req.query
+            filters: req.query,
+            user: req.session.user
         });
     } catch (error) {
         console.error('Error fetching bookings:', error);
@@ -53,8 +55,8 @@ exports.getBookingById = async (req, res) => {
     try {
         const booking = await Booking.findByPk(req.params.id, {
             include: [
-                { model: Bus, attributes: ['busNumber', 'source', 'destination', 'departureTime', 'arrivalTime', 'fare'] },
-                { model: User, attributes: ['name', 'email'] }
+                { model: Bus, as: 'bus', attributes: ['busNumber', 'source', 'destination', 'departureTime', 'arrivalTime', 'fare'] },
+                { model: User, as: 'user', attributes: ['firstName', 'lastName', 'email'] }
             ]
         });
 
@@ -69,7 +71,11 @@ exports.getBookingById = async (req, res) => {
             return res.redirect('/bookings');
         }
 
-        res.render('bookings/show', { booking });
+        res.render('bookings/show', { 
+            title: 'Booking Details',
+            booking,
+            user: req.session.user
+        });
     } catch (error) {
         console.error('Error fetching booking:', error);
         req.flash('error', 'Error fetching booking details');
@@ -80,24 +86,43 @@ exports.getBookingById = async (req, res) => {
 // Show booking form
 exports.showBookingForm = async (req, res) => {
     try {
-        const bus = await Bus.findByPk(req.query.busId);
+        const { busId, date, passengers } = req.query;
+        
+        if (!busId || !date || !passengers) {
+            req.flash('error_msg', 'Missing required booking information');
+            return res.redirect('/search');
+        }
+
+        const bus = await Bus.findByPk(busId);
         if (!bus) {
-            req.flash('error', 'Bus not found');
-            return res.redirect('/buses');
+            req.flash('error_msg', 'Bus not found');
+            return res.redirect('/search');
         }
 
         // Check if bus has available seats
-        if (bus.totalSeats <= bus.bookedSeats) {
-            req.flash('error', 'Sorry, this bus is fully booked');
-            return res.redirect(`/buses/${bus.id}`);
+        const availableSeats = bus.totalSeats - bus.bookedSeats;
+        if (availableSeats < parseInt(passengers)) {
+            req.flash('error_msg', 'Sorry, not enough seats available');
+            return res.redirect('/search');
         }
 
-        const seatLayout = JSON.parse(bus.seatLayout || '{}');
-        res.render('bookings/new', { bus, seatLayout });
+        // Get seat layout
+        const seatLayout = typeof bus.seatLayout === 'string'
+            ? JSON.parse(bus.seatLayout || '{}')
+            : bus.seatLayout || {};
+            
+        res.render('bookings/new', { 
+            title: 'Book Tickets',
+            bus, 
+            seatLayout,
+            date,
+            passengers: parseInt(passengers),
+            user: req.session.user
+        });
     } catch (error) {
         console.error('Error showing booking form:', error);
-        req.flash('error', 'Error loading booking form');
-        res.redirect('/buses');
+        req.flash('error_msg', 'Error loading booking form');
+        res.redirect('/search');
     }
 };
 
@@ -105,22 +130,50 @@ exports.showBookingForm = async (req, res) => {
 exports.createBooking = async (req, res) => {
     try {
         const { busId, seats, passengerDetails } = req.body;
-        const bus = await Bus.findByPk(busId);
+        
+        if (!busId || !seats || !passengerDetails) {
+            req.flash('error_msg', 'Missing required booking information');
+            return res.redirect('/search');
+        }
 
+        const bus = await Bus.findByPk(busId);
         if (!bus) {
-            req.flash('error', 'Bus not found');
-            return res.redirect('/buses');
+            req.flash('error_msg', 'Bus not found');
+            return res.redirect('/search');
+        }
+
+        // Parse and validate seat selection
+        const selectedSeats = JSON.parse(seats);
+        const passengers = JSON.parse(passengerDetails);
+        
+        if (!Array.isArray(selectedSeats) || !Array.isArray(passengers)) {
+            req.flash('error_msg', 'Invalid seat or passenger information');
+            return res.redirect(`/bookings/new?busId=${busId}`);
+        }
+
+        if (selectedSeats.length !== passengers.length) {
+            req.flash('error_msg', 'Number of seats and passengers must match');
+            return res.redirect(`/bookings/new?busId=${busId}`);
         }
 
         // Validate seat availability
-        const selectedSeats = JSON.parse(seats);
-        const seatLayout = JSON.parse(bus.seatLayout || '{}');
+        const seatLayout = typeof bus.seatLayout === 'string' 
+            ? JSON.parse(bus.seatLayout) 
+            : bus.seatLayout;
         
-        // Check if selected seats are available
         for (const seatNumber of selectedSeats) {
-            if (seatLayout[seatNumber] === 'booked') {
-                req.flash('error', `Seat ${seatNumber} is already booked`);
-                return res.redirect(`/buses/${busId}`);
+            const seat = seatLayout[seatNumber];
+            let isBooked = false;
+            
+            if (typeof seat === 'string') {
+                isBooked = seat === 'booked';
+            } else if (typeof seat === 'object') {
+                isBooked = seat.status === 'booked';
+            }
+            
+            if (isBooked) {
+                req.flash('error_msg', `Seat ${seatNumber} is already booked`);
+                return res.redirect(`/bookings/new?busId=${busId}`);
             }
         }
 
@@ -129,27 +182,31 @@ exports.createBooking = async (req, res) => {
             userId: req.user.id,
             busId,
             seats: selectedSeats,
-            passengerDetails: JSON.parse(passengerDetails),
+            passengerDetails: passengers,
             totalAmount: selectedSeats.length * bus.fare,
             status: 'pending'
         });
 
         // Update bus seat layout and booked seats count
+        const updatedSeatLayout = { ...seatLayout };
         selectedSeats.forEach(seatNumber => {
-            seatLayout[seatNumber] = 'booked';
-        });
-        
-        await bus.update({
-            seatLayout: JSON.stringify(seatLayout),
-            bookedSeats: bus.bookedSeats + selectedSeats.length
+            if (typeof updatedSeatLayout[seatNumber] === 'string') {
+                updatedSeatLayout[seatNumber] = 'booked';
+            } else if (typeof updatedSeatLayout[seatNumber] === 'object') {
+                updatedSeatLayout[seatNumber].status = 'booked';
+            }
         });
 
-        req.flash('success', 'Booking created successfully');
-        res.redirect(`/bookings/${booking.id}`);
+        bus.seatLayout = updatedSeatLayout;
+        bus.bookedSeats = (bus.bookedSeats || 0) + selectedSeats.length;
+        await bus.save();
+
+        // Redirect to payment page
+        res.redirect(`/payments/new?bookingId=${booking.id}`);
     } catch (error) {
         console.error('Error creating booking:', error);
-        req.flash('error', 'Error creating booking');
-        res.redirect('/buses');
+        req.flash('error_msg', 'Error creating booking. Please try again.');
+        res.redirect('/search');
     }
 };
 
@@ -182,11 +239,20 @@ exports.cancelBooking = async (req, res) => {
         await booking.update({ status: 'cancelled' });
 
         // Update bus seat layout and booked seats count
-        const seatLayout = JSON.parse(bus.seatLayout || '{}');
-        const bookedSeats = JSON.parse(booking.seats);
+        const seatLayout = typeof bus.seatLayout === 'string' 
+            ? JSON.parse(bus.seatLayout) 
+            : { ...bus.seatLayout };
+            
+        const bookedSeats = typeof booking.seats === 'string'
+            ? JSON.parse(booking.seats)
+            : booking.seats;
         
         bookedSeats.forEach(seatNumber => {
-            seatLayout[seatNumber] = 'available';
+            if (typeof seatLayout[seatNumber] === 'string') {
+                seatLayout[seatNumber] = 'available';
+            } else if (typeof seatLayout[seatNumber] === 'object') {
+                seatLayout[seatNumber].status = 'available';
+            }
         });
 
         await bus.update({

@@ -29,7 +29,11 @@ router.get('/contact', (req, res) => {
 router.get('/search', (req, res) => {
     res.render('search', { 
         title: 'Search Buses',
-        user: req.session.user
+        user: req.session.user,
+        source: req.query.source || '',
+        destination: req.query.destination || '',
+        date: req.query.date || '',
+        passengers: req.query.passengers || 1
     });
 });
 

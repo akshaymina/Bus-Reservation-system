@@ -241,4 +241,107 @@ exports.updateBusSeatLayout = async (req, res) => {
         console.error('Error updating bus seat layout:', error);
         res.status(500).json({ message: 'Error updating bus seat layout', error: error.message });
     }
+};
+
+// Search buses
+exports.searchBuses = async (req, res) => {
+    try {
+        const { source, destination, date, passengers } = req.query;
+        
+        // Validate required fields
+        if (!source || !destination || !date) {
+            req.flash('error_msg', 'Please provide source, destination, and date for search');
+            return res.redirect('/search');
+        }
+
+        // Validate date format
+        const searchDate = new Date(date);
+        if (isNaN(searchDate.getTime())) {
+            req.flash('error_msg', 'Invalid date format');
+            return res.redirect('/search');
+        }
+        
+        // Build filter conditions
+        const where = {
+            isActive: true,
+            source: { [Op.iLike]: `%${source.trim()}%` },
+            destination: { [Op.iLike]: `%${destination.trim()}%` }
+        };
+        
+        // Set date range for the search
+        const startOfDay = new Date(searchDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(searchDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        
+        where.departureTime = {
+            [Op.between]: [startOfDay, endOfDay]
+        };
+        
+        // Get buses
+        const buses = await Bus.findAll({
+            where,
+            order: [['departureTime', 'ASC']]
+        });
+        
+        // Filter buses with enough available seats
+        const filteredBuses = buses.filter(bus => {
+            try {
+                // Calculate available seats
+                const totalSeats = bus.totalSeats || 0;
+                const bookedSeats = bus.bookedSeats || 0;
+                const availableSeats = totalSeats - bookedSeats;
+                
+                // Check if bus has enough seats for the requested number of passengers
+                const requestedSeats = parseInt(passengers) || 1;
+                return availableSeats >= requestedSeats;
+            } catch (error) {
+                console.error(`Error checking available seats for bus ${bus.id}:`, error);
+                return false;
+            }
+        });
+
+        // Format times for display
+        filteredBuses.forEach(bus => {
+            try {
+                bus.formattedDepartureTime = new Date(bus.departureTime).toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                bus.formattedArrivalTime = new Date(bus.arrivalTime).toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (error) {
+                console.error(`Error formatting times for bus ${bus.id}:`, error);
+                bus.formattedDepartureTime = 'N/A';
+                bus.formattedArrivalTime = 'N/A';
+            }
+        });
+
+        // If no buses found, show appropriate message
+        if (filteredBuses.length === 0) {
+            req.flash('info_msg', 'No buses found matching your search criteria');
+        }
+
+        res.render('search', { 
+            title: 'Search Results',
+            buses: filteredBuses,
+            user: req.session.user,
+            source,
+            destination,
+            date,
+            passengers
+        });
+    } catch (error) {
+        console.error('Error searching buses:', error);
+        req.flash('error_msg', 'Error searching buses. Please try again.');
+        res.redirect('/search');
+    }
 }; 

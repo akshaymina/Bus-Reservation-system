@@ -176,32 +176,108 @@ footer a:hover {
 }
 
 /* Seat Selection Styles */
+.seat-layout {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
 .seat {
-    width: 40px;
+    width: 100%;
     height: 40px;
     margin: 5px;
-    display: inline-block;
-    text-align: center;
-    line-height: 40px;
     border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
+    font-size: 14px;
     transition: all 0.3s ease;
+    user-select: none;
 }
 
-.seat-available {
+.seat.available {
+    background-color: #e9ecef;
+    border: 1px solid #dee2e6;
+}
+
+.seat.available:hover {
+    background-color: #dee2e6;
+    transform: scale(1.05);
+}
+
+.seat.selected {
     background-color: #28a745;
     color: white;
+    border: 1px solid #28a745;
 }
 
-.seat-booked {
+.seat.booked {
     background-color: #dc3545;
     color: white;
+    border: 1px solid #dc3545;
     cursor: not-allowed;
+    opacity: 0.8;
 }
 
-.seat-selected {
-    background-color: #007bff;
-    color: white;
+.seat-legend {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-right: 20px;
+}
+
+.seat-legend .seat {
+    width: 30px;
+    height: 30px;
+    margin: 0;
+}
+
+.seat-legend span {
+    font-size: 14px;
+    color: #6c757d;
+}
+
+/* Passenger Form Styles */
+.passenger-form {
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.passenger-form .card-title {
+    color: #495057;
+    font-size: 16px;
+    margin-bottom: 15px;
+}
+
+/* Search Results Styles */
+.bus-card {
+    transition: transform 0.3s ease;
+}
+
+.bus-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.bus-card .badge {
+    font-size: 12px;
+    padding: 5px 10px;
+}
+
+.bus-card .price {
+    font-size: 24px;
+    font-weight: bold;
+    color: #28a745;
+}
+
+.bus-card .price small {
+    font-size: 14px;
+    color: #6c757d;
 }
 
 /* Responsive Styles */

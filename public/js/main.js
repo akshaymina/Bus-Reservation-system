@@ -6,6 +6,12 @@ document.addEventListener('DOMContentLoaded', function() {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 
+    // Initialize popovers
+    var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+    var popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
+        return new bootstrap.Popover(popoverTriggerEl);
+    });
+
     // Handle flash messages
     const flashMessages = document.querySelectorAll('.alert');
     flashMessages.forEach(function(flash) {
@@ -38,6 +44,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 selectedSeats.push(seatNumber);
             }
             
+            // Update hidden input value for form submission
+            const seatsInput = document.getElementById('selected-seats');
+            if (seatsInput) {
+                seatsInput.value = JSON.stringify(selectedSeats);
+            }
+            
             // Update selected seats count
             const selectedSeatsCount = document.getElementById('selected-seats-count');
             if (selectedSeatsCount) {
@@ -46,6 +58,12 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Update total amount
             updateTotalAmount();
+            
+            // Enable/disable submit button based on seat selection
+            const submitButton = document.getElementById('submitBooking');
+            if (submitButton) {
+                submitButton.disabled = selectedSeats.length === 0;
+            }
         });
     });
     
@@ -70,5 +88,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             form.classList.add('was-validated');
         }, false);
+    });
+    
+    // Date input restrictions (prevent selecting past dates)
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    dateInputs.forEach(input => {
+        const today = new Date().toISOString().split('T')[0];
+        input.setAttribute('min', today);
     });
 }); 

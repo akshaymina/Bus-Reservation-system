@@ -5,6 +5,7 @@ const { protect, authorize } = require('../middleware/auth');
 
 // Public routes
 router.get('/', busController.getAllBuses);
+router.get('/search', busController.searchBuses);
 router.get('/:id', busController.getBusById);
 router.get('/:id/seat-layout', busController.getBusSeatLayout);
 

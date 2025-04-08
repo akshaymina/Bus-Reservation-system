@@ -15,19 +15,19 @@
                     <form action="/buses/search" method="GET" class="row g-3">
                         <div class="col-md-3">
                             <label for="source" class="form-label">From</label>
-                            <input type="text" class="form-control" id="source" name="source" required>
+                            <input type="text" class="form-control" id="source" name="source" value="<%= locals.source || '' %>" required>
                         </div>
                         <div class="col-md-3">
                             <label for="destination" class="form-label">To</label>
-                            <input type="text" class="form-control" id="destination" name="destination" required>
+                            <input type="text" class="form-control" id="destination" name="destination" value="<%= locals.destination || '' %>" required>
                         </div>
                         <div class="col-md-3">
                             <label for="date" class="form-label">Date</label>
-                            <input type="date" class="form-control" id="date" name="date" required>
+                            <input type="date" class="form-control" id="date" name="date" value="<%= locals.date || '' %>" required>
                         </div>
                         <div class="col-md-3">
                             <label for="passengers" class="form-label">Passengers</label>
-                            <input type="number" class="form-control" id="passengers" name="passengers" min="1" value="1" required>
+                            <input type="number" class="form-control" id="passengers" name="passengers" min="1" value="<%= locals.passengers || 1 %>" required>
                         </div>
                         <div class="col-12 text-center">
                             <button type="submit" class="btn btn-primary">Search Buses</button>
@@ -41,17 +41,39 @@
                 <div class="row">
                     <% buses.forEach(bus => { %>
                         <div class="col-md-6 mb-4">
-                            <div class="card">
+                            <div class="card h-100">
                                 <div class="card-body">
-                                    <h5 class="card-title"><%= bus.busNumber %></h5>
-                                    <p class="card-text">
-                                        <strong>From:</strong> <%= bus.source %><br>
-                                        <strong>To:</strong> <%= bus.destination %><br>
-                                        <strong>Departure:</strong> <%= bus.departureTime %><br>
-                                        <strong>Arrival:</strong> <%= bus.arrivalTime %><br>
-                                        <strong>Price:</strong> $<%= bus.fare %>
-                                    </p>
-                                    <a href="/buses/<%= bus.id %>" class="btn btn-primary">View Details</a>
+                                    <div class="d-flex justify-content-between align-items-start mb-3">
+                                        <div>
+                                            <h5 class="card-title mb-1"><%= bus.busName %></h5>
+                                            <h6 class="card-subtitle text-muted"><%= bus.busNumber %> - <%= bus.busType %></h6>
+                                        </div>
+                                        <span class="badge bg-success">
+                                            <%= bus.totalSeats - bus.bookedSeats %> seats available
+                                        </span>
+                                    </div>
+                                    
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <p class="mb-1"><strong>From:</strong> <%= bus.source %></p>
+                                            <p class="mb-1"><strong>To:</strong> <%= bus.destination %></p>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <p class="mb-1"><strong>Departure:</strong> <%= bus.formattedDepartureTime %></p>
+                                            <p class="mb-1"><strong>Arrival:</strong> <%= bus.formattedArrivalTime %></p>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h4 class="mb-0">₹<%= bus.fare %></h4>
+                                            <small class="text-muted">per seat</small>
+                                        </div>
+                                        <a href="/bookings/new?busId=<%= bus.id %>&date=<%= locals.date %>&passengers=<%= locals.passengers %>" 
+                                           class="btn btn-primary">
+                                            Select Seats
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -1,6 +1,9 @@
 <%- include('../partials/header') %>
 
-<div class="container mt-4">
+<div class="container mt-4" 
+     data-bus-fare="<%= bus.fare %>" 
+     data-max-passengers="<%= passengers %>" 
+     data-seat-layout="<%- JSON.stringify(seatLayout) %>">
     <div class="row mb-4">
         <div class="col-md-12">
             <h1>Book Bus</h1>
@@ -12,14 +15,14 @@
         <div class="col-md-4">
             <div class="card mb-4">
                 <div class="card-body">
-                    <h5 class="card-title"><%= bus.busNumber %></h5>
-                    <h6 class="card-subtitle mb-3 text-muted"><%= bus.busType %></h6>
+                    <h5 class="card-title"><%= bus.busName %></h5>
+                    <h6 class="card-subtitle mb-3 text-muted"><%= bus.busNumber %> - <%= bus.busType %></h6>
                     
                     <div class="mb-3">
                         <p><strong>From:</strong> <%= bus.source %></p>
                         <p><strong>To:</strong> <%= bus.destination %></p>
-                        <p><strong>Departure:</strong> <%= new Date(bus.departureTime).toLocaleString() %></p>
-                        <p><strong>Arrival:</strong> <%= new Date(bus.arrivalTime).toLocaleString() %></p>
+                        <p><strong>Departure:</strong> <%= bus.formattedDepartureTime %></p>
+                        <p><strong>Arrival:</strong> <%= bus.formattedArrivalTime %></p>
                     </div>
 
                     <div class="mb-3">
@@ -40,22 +43,18 @@
 
                     <div class="seat-layout mt-3">
                         <% for(let row = 1; row <= Math.ceil(bus.totalSeats / 4); row++) { %>
-                            <div class="row mb-2">
+                            <div class="seat-row">
                                 <% for(let col = 1; col <= 4; col++) { %>
                                     <% const seatNumber = (row - 1) * 4 + col; %>
                                     <% if (seatNumber <= bus.totalSeats) { %>
                                         <% const seatStatus = seatLayout[seatNumber] || 'available'; %>
-                                        <div class="col-3">
-                                            <div class="seat <%= seatStatus %>" 
-                                                 data-seat-number="<%= seatNumber %>"
-                                                 data-bs-toggle="tooltip"
-                                                 data-bs-placement="top"
-                                                 title="<%= seatStatus === 'available' ? 'Click to select' : 'Not available' %>">
-                                                Seat <%= seatNumber %>
-                                            </div>
+                                        <div class="seat <%= seatStatus %>" 
+                                             data-seat-number="<%= seatNumber %>"
+                                             data-bs-toggle="tooltip"
+                                             data-bs-placement="top"
+                                             title="<%= seatStatus === 'available' ? 'Click to select' : 'Not available' %>">
+                                            <%= seatNumber %>
                                         </div>
-                                    <% } else { %>
-                                        <div class="col-3"></div>
                                     <% } %>
                                 <% } %>
                             </div>
@@ -100,7 +99,8 @@
                             <button type="submit" class="btn btn-primary" id="submitBooking" disabled>
                                 Proceed to Payment
                             </button>
-                            <a href="/buses/<%= bus.id %>" class="btn btn-secondary">Cancel</a>
+                            <a href="/buses/search?source=<%= bus.source %>&destination=<%= bus.destination %>&date=<%= date %>&passengers=<%= passengers %>" 
+                               class="btn btn-secondary">Back to Search</a>
                         </div>
                     </form>
                 </div>
@@ -109,11 +109,95 @@
     </div>
 </div>
 
-<script>
+<style>
+.seat-layout {
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.seat-row {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.seat {
+    width: 45px;
+    height: 45px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    border: 2px solid #ccc;
+}
+
+.seat.available {
+    background-color: #ffffff;
+    color: #333;
+    border-color: #28a745;
+}
+
+.seat.available:hover {
+    background-color: #e8f5e9;
+    transform: scale(1.05);
+}
+
+.seat.selected {
+    background-color: #28a745;
+    color: white;
+    border-color: #1e7e34;
+}
+
+.seat.booked {
+    background-color: #dc3545;
+    color: white;
+    border-color: #bd2130;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* Aisle styling */
+.seat-row .col-3:nth-child(2) {
+    margin-right: 20px; /* Creates an aisle after the second seat */
+}
+
+.seat-legend {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 20px;
+    padding: 10px;
+    background: white;
+    border-radius: 8px;
+}
+
+.seat-legend .seat {
+    width: 35px;
+    height: 35px;
+    margin: 0;
+}
+
+.seat-legend span {
+    font-size: 14px;
+}
+</style>
+
+<script type="text/template">
 document.addEventListener('DOMContentLoaded', function() {
     const selectedSeats = new Set();
-    const baseFare = <%= bus.fare %>;
-    const seatLayout = <%- JSON.stringify(seatLayout) %>;
+    const container = document.querySelector('.container');
+    const baseFare = parseFloat(container.dataset.busFare);
+    const seatLayout = JSON.parse(container.dataset.seatLayout);
+    const maxPassengers = parseInt(container.dataset.maxPassengers);
 
     // Initialize tooltips
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
@@ -129,8 +213,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 selectedSeats.delete(seatNumber);
                 this.classList.remove('selected');
             } else {
-                selectedSeats.add(seatNumber);
-                this.classList.add('selected');
+                if (selectedSeats.size < maxPassengers) {
+                    selectedSeats.add(seatNumber);
+                    this.classList.add('selected');
+                } else {
+                    alert(`You can only select ${maxPassengers} seats`);
+                }
             }
             updateSelectedSeats();
             updatePassengerForms();
@@ -149,81 +237,62 @@ document.addEventListener('DOMContentLoaded', function() {
         const container = document.getElementById('passengerForms');
         container.innerHTML = '';
         
-        selectedSeats.forEach((seatNumber, index) => {
-            const formHtml = `
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <h6 class="card-title">Passenger ${index + 1} (Seat ${seatNumber})</h6>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Name</label>
-                                <input type="text" class="form-control passenger-name" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Age</label>
-                                <input type="number" class="form-control passenger-age" min="1" max="120" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Gender</label>
-                                <select class="form-select passenger-gender" required>
-                                    <option value="">Select Gender</option>
-                                    <option value="male">Male</option>
-                                    <option value="female">Female</option>
-                                    <option value="other">Other</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Seat Number</label>
-                                <input type="text" class="form-control" value="${seatNumber}" readonly>
-                            </div>
+        [...selectedSeats].forEach((seatNumber, index) => {
+            const form = document.createElement('div');
+            form.className = 'card mb-3';
+            form.innerHTML = `
+                <div class="card-body">
+                    <h6 class="card-title">Passenger ${index + 1} - Seat ${seatNumber}</h6>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Name</label>
+                            <input type="text" class="form-control" name="passengerName${index}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Age</label>
+                            <input type="number" class="form-control" name="passengerAge${index}" min="1" max="120" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Gender</label>
+                            <select class="form-select" name="passengerGender${index}" required>
+                                <option value="">Select gender</option>
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Phone</label>
+                            <input type="tel" class="form-control" name="passengerPhone${index}" required>
                         </div>
                     </div>
                 </div>
             `;
-            container.insertAdjacentHTML('beforeend', formHtml);
+            container.appendChild(form);
         });
+
+        // Update passenger details hidden input
+        document.getElementById('passengerDetails').value = JSON.stringify(
+            [...selectedSeats].map((seatNumber, index) => ({
+                seatNumber: parseInt(seatNumber),
+                name: document.querySelector(`[name="passengerName${index}"]`)?.value || '',
+                age: document.querySelector(`[name="passengerAge${index}"]`)?.value || '',
+                gender: document.querySelector(`[name="passengerGender${index}"]`)?.value || '',
+                phone: document.querySelector(`[name="passengerPhone${index}"]`)?.value || ''
+            }))
+        );
     }
 
-    // Handle form submission
-    document.getElementById('bookingForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        if (!this.checkValidity()) {
-            e.stopPropagation();
-            this.classList.add('was-validated');
-            return;
+    // Form validation
+    const form = document.getElementById('bookingForm');
+    form.addEventListener('submit', function(event) {
+        if (!form.checkValidity()) {
+            event.preventDefault();
+            event.stopPropagation();
         }
-
-        const passengers = [];
-        const forms = document.querySelectorAll('.card.mb-3');
-        
-        forms.forEach(form => {
-            passengers.push({
-                name: form.querySelector('.passenger-name').value,
-                age: form.querySelector('.passenger-age').value,
-                gender: form.querySelector('.passenger-gender').value,
-                seatNumber: form.querySelector('input[readonly]').value
-            });
-        });
-
-        document.getElementById('passengerDetails').value = JSON.stringify(passengers);
-        this.submit();
+        form.classList.add('was-validated');
     });
 });
 </script>
-
-<style>
-.seat-legend {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.seat-legend .seat {
-    width: 30px;
-    height: 30px;
-    margin: 0;
-}
-</style>
 
 <%- include('../partials/footer') %> 

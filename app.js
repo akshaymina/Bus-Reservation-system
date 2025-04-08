@@ -3,6 +3,7 @@ const session = require('express-session');
 const passport = require('passport');
 const flash = require('connect-flash');
 const path = require('path');
+const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
 // Import passport config
@@ -17,6 +18,7 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(cookieParser());
 
 // View engine setup
 app.set('view engine', 'ejs');
@@ -25,8 +27,12 @@ app.set('views', path.join(__dirname, 'views'));
 // Session configuration
 app.use(session({
     secret: process.env.SESSION_SECRET || 'your-secret-key',
-    resave: false,
-    saveUninitialized: false
+    resave: true,
+    saveUninitialized: false,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
 }));
 
 // Passport middleware
@@ -38,6 +44,7 @@ app.use(flash());
 
 // Global variables
 app.use((req, res, next) => {
+    res.locals.user = req.session.user || null;
     res.locals.success_msg = req.flash('success_msg');
     res.locals.error_msg = req.flash('error_msg');
     res.locals.error = req.flash('error');
@@ -46,17 +53,18 @@ app.use((req, res, next) => {
 
 // Routes
 app.use('/', require('./routes/index'));
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/admin', require('./routes/admin'));
-app.use('/api/buses', require('./routes/buses'));
-app.use('/api/bookings', require('./routes/bookings'));
+app.use('/auth', require('./routes/auth'));
+app.use('/users', require('./routes/users'));
+app.use('/admin', require('./routes/admin'));
+app.use('/buses', require('./routes/buses'));
+app.use('/bookings', require('./routes/bookings'));
 app.use('/payments', require('./routes/payments'));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error(err.stack);
-    res.status(500).json({ message: 'Something went wrong!', error: err.message });
+    req.flash('error_msg', 'Something went wrong!');
+    res.redirect('/');
 });
 
 // Database sync and server start

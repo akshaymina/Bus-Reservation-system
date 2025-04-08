@@ -1,56 +1,55 @@
-const jwt = require('jsonwebtoken');
-const { User } = require('../models/user');
+const { User } = require('../models/User');
 
 // Middleware to protect routes
 exports.protect = async (req, res, next) => {
     try {
-        let token;
-
-        // Check if token exists in headers
-        if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-            token = req.headers.authorization.split(' ')[1];
+        // Check if user is logged in
+        if (!req.session.user) {
+            req.flash('error_msg', 'Please log in to access this resource');
+            return res.redirect('/auth/login');
         }
 
-        // Check if token exists
-        if (!token) {
-            return res.status(401).json({ message: 'Not authorized to access this route' });
+        // Get user from database
+        const user = await User.findByPk(req.session.user.id);
+        if (!user) {
+            req.flash('error_msg', 'User not found');
+            req.session.destroy();
+            return res.redirect('/auth/login');
         }
 
-        try {
-            // Verify token
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-            // Get user from token
-            const user = await User.findByPk(decoded.id);
-            if (!user) {
-                return res.status(401).json({ message: 'User not found' });
-            }
-
-            // Check if user is active
-            if (!user.isActive) {
-                return res.status(401).json({ message: 'User account is deactivated' });
-            }
-
-            // Add user to request object
-            req.user = user;
-            next();
-        } catch (error) {
-            return res.status(401).json({ message: 'Not authorized to access this route' });
+        // Check if user is active
+        if (!user.isActive) {
+            req.flash('error_msg', 'Your account has been deactivated');
+            req.session.destroy();
+            return res.redirect('/auth/login');
         }
+
+        // Add user to request object
+        req.user = user;
+        next();
     } catch (error) {
         console.error('Auth middleware error:', error);
-        res.status(500).json({ message: 'Server error', error: error.message });
+        req.flash('error_msg', 'An error occurred. Please try again');
+        res.redirect('/auth/login');
     }
 };
 
 // Middleware to restrict access to specific roles
 exports.authorize = (...roles) => {
     return (req, res, next) => {
-        if (!roles.includes(req.user.role)) {
-            return res.status(403).json({ 
-                message: `User role ${req.user.role} is not authorized to access this route` 
-            });
+        if (!req.session.user || !roles.includes(req.session.user.role)) {
+            req.flash('error_msg', 'You do not have permission to access this resource');
+            return res.redirect('/');
         }
         next();
     };
+};
+
+// Middleware to restrict access to admin only
+exports.admin = (req, res, next) => {
+    if (!req.session.user || req.session.user.role !== 'admin') {
+        req.flash('error_msg', 'Access denied. Admin privileges required.');
+        return res.redirect('/');
+    }
+    next();
 }; 

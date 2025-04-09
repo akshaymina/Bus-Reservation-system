@@ -248,24 +248,48 @@ exports.searchBuses = async (req, res) => {
     try {
         const { source, destination, date, passengers } = req.query;
         
+        console.log('Search Parameters:', { source, destination, date, passengers });
+        
         // Validate required fields
         if (!source || !destination || !date) {
+            console.log('Missing required fields:', { source, destination, date });
+            if (req.xhr || req.headers.accept.indexOf('json') > -1) {
+                return res.status(400).json({ error: 'Please provide source, destination, and date for search' });
+            }
             req.flash('error_msg', 'Please provide source, destination, and date for search');
             return res.redirect('/search');
         }
 
-        // Validate date format
+        // Validate date format and ensure it's not in the past
         const searchDate = new Date(date);
-        if (isNaN(searchDate.getTime())) {
-            req.flash('error_msg', 'Invalid date format');
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        console.log('Date Validation:', {
+            searchDate: searchDate.toISOString(),
+            today: today.toISOString(),
+            isValid: !isNaN(searchDate.getTime()),
+            isFuture: searchDate >= today
+        });
+        
+        if (isNaN(searchDate.getTime()) || searchDate < today) {
+            console.log('Invalid date or past date');
+            if (req.xhr || req.headers.accept.indexOf('json') > -1) {
+                return res.status(400).json({ error: 'Please select a valid future date' });
+            }
+            req.flash('error_msg', 'Please select a valid future date');
             return res.redirect('/search');
         }
         
         // Build filter conditions
         const where = {
             isActive: true,
-            source: { [Op.iLike]: `%${source.trim()}%` },
-            destination: { [Op.iLike]: `%${destination.trim()}%` }
+            source: { 
+                [Op.iLike]: `%${source.trim()}%` 
+            },
+            destination: { 
+                [Op.iLike]: `%${destination.trim()}%` 
+            }
         };
         
         // Set date range for the search
@@ -277,6 +301,12 @@ exports.searchBuses = async (req, res) => {
         where.departureTime = {
             [Op.between]: [startOfDay, endOfDay]
         };
+
+        console.log('Search Query:', {
+            where: JSON.stringify(where, null, 2),
+            startOfDay: startOfDay.toISOString(),
+            endOfDay: endOfDay.toISOString()
+        });
         
         // Get buses
         const buses = await Bus.findAll({
@@ -284,40 +314,79 @@ exports.searchBuses = async (req, res) => {
             order: [['departureTime', 'ASC']]
         });
         
+        console.log('Initial buses found:', buses.length);
+        
         // Filter buses with enough available seats
         const filteredBuses = buses.filter(bus => {
             try {
-                // Calculate available seats
-                const totalSeats = bus.totalSeats || 0;
-                const bookedSeats = bus.bookedSeats || 0;
-                const availableSeats = totalSeats - bookedSeats;
+                // Get available seats from seatLayout
+                let seatLayout;
+                try {
+                    seatLayout = typeof bus.seatLayout === 'string' 
+                        ? JSON.parse(bus.seatLayout)
+                        : bus.seatLayout;
+                } catch (e) {
+                    console.error(`Error parsing seat layout for bus ${bus.id}:`, e);
+                    seatLayout = {};
+                }
+
+                if (!seatLayout) {
+                    // If no seat layout, assume all seats are available
+                    return true;
+                }
+                
+                const availableSeats = Object.values(seatLayout).filter(seat => {
+                    if (typeof seat === 'string') {
+                        return seat === 'available';
+                    } else if (typeof seat === 'object' && seat !== null) {
+                        return seat.status === 'available';
+                    }
+                    return false;
+                }).length;
+                
+                // If no seats are marked in the layout, assume all seats are available
+                if (availableSeats === 0 && Object.keys(seatLayout).length === 0) {
+                    return true;
+                }
                 
                 // Check if bus has enough seats for the requested number of passengers
                 const requestedSeats = parseInt(passengers) || 1;
-                return availableSeats >= requestedSeats;
+                const hasEnoughSeats = availableSeats >= requestedSeats;
+                
+                console.log(`Bus ${bus.id} check:`, {
+                    availableSeats,
+                    requestedSeats,
+                    hasEnoughSeats,
+                    source: bus.source,
+                    destination: bus.destination,
+                    departureTime: bus.departureTime,
+                    totalSeats: bus.totalSeats,
+                    seatLayoutEmpty: Object.keys(seatLayout).length === 0
+                });
+                
+                return hasEnoughSeats;
             } catch (error) {
                 console.error(`Error checking available seats for bus ${bus.id}:`, error);
-                return false;
+                // If there's an error checking seats, include the bus by default
+                return true;
             }
         });
 
+        console.log('Filtered buses:', filteredBuses.length);
+
         // Format times for display
+        const dateFormatOptions = {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        };
+
         filteredBuses.forEach(bus => {
             try {
-                bus.formattedDepartureTime = new Date(bus.departureTime).toLocaleString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-                bus.formattedArrivalTime = new Date(bus.arrivalTime).toLocaleString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
+                bus.formattedDepartureTime = new Date(bus.departureTime).toLocaleString('en-US', dateFormatOptions);
+                bus.formattedArrivalTime = new Date(bus.arrivalTime).toLocaleString('en-US', dateFormatOptions);
             } catch (error) {
                 console.error(`Error formatting times for bus ${bus.id}:`, error);
                 bus.formattedDepartureTime = 'N/A';
@@ -327,21 +396,31 @@ exports.searchBuses = async (req, res) => {
 
         // If no buses found, show appropriate message
         if (filteredBuses.length === 0) {
-            req.flash('info_msg', 'No buses found matching your search criteria');
+            if (req.xhr || req.headers.accept.indexOf('json') > -1) {
+                return res.json({ 
+                    success: false,
+                    message: 'No buses found for your search criteria'
+                });
+            }
+            req.flash('info_msg', 'No buses found for your search criteria');
         }
 
-        res.render('search', { 
+        // Render the search results
+        res.render('search', {
             title: 'Search Results',
-            buses: filteredBuses,
             user: req.session.user,
-            source,
-            destination,
-            date,
-            passengers
+            buses: filteredBuses,
+            source: source,
+            destination: destination,
+            date: date,
+            passengers: passengers || 1
         });
     } catch (error) {
         console.error('Error searching buses:', error);
-        req.flash('error_msg', 'Error searching buses. Please try again.');
+        if (req.xhr || req.headers.accept.indexOf('json') > -1) {
+            return res.status(500).json({ error: 'Error searching buses' });
+        }
+        req.flash('error_msg', 'Error searching buses');
         res.redirect('/search');
     }
 }; 

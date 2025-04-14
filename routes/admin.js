@@ -40,13 +40,10 @@ router.get(['/', '/dashboard'], protect, isAdmin, async (req, res) => {
 
 // Bus management routes
 router.get('/buses', protect, isAdmin, async (req, res) => {
-    console.log('Accessing bus management');
-    console.log('User:', req.session.user);
     try {
         const buses = await Bus.findAll();
-        console.log('Buses:', buses);
-        res.render('admin/buses', { 
-            title: 'Manage Buses', 
+        res.render('admin/buses', {
+            title: 'Manage Buses',
             buses,
             messages: {
                 success: res.locals.success_msg,
@@ -118,26 +115,69 @@ router.get('/bookings', protect, isAdmin, async (req, res) => {
     }
 });
 
-// Add new bus
 router.post('/buses', protect, isAdmin, async (req, res) => {
     try {
-        const bus = await Bus.create({
-            busNumber: req.body.busNumber,
-            busType: req.body.busType,
-            source: req.body.source,
-            destination: req.body.destination,
-            departureTime: req.body.departureTime,
-            arrivalTime: req.body.arrivalTime,
-            fare: req.body.fare,
-            totalSeats: req.body.totalSeats,
-            availableSeats: req.body.totalSeats
+        const {
+            busNumber,
+            busName,
+            source,
+            destination,
+            departureTime,
+            arrivalTime,
+            totalSeats,
+            fare,
+            busType,
+            isActive
+        } = req.body;
+
+        await Bus.create({
+            busNumber,
+            busName,
+            source,
+            destination,
+            departureTime,
+            arrivalTime,
+            totalSeats: parseInt(totalSeats),
+            fare: parseFloat(fare),
+            busType,
+            isActive: isActive === 'true'
         });
+
         req.flash('success_msg', 'Bus added successfully');
         res.redirect('/admin/buses');
     } catch (error) {
-        console.error('Add bus error:', error);
+        console.error('Create bus error:', error);
         req.flash('error_msg', 'Error adding bus');
         res.redirect('/admin/buses');
+    }
+});
+
+router.delete('/buses/:id', protect, isAdmin, async (req, res) => {
+    try {
+        const bus = await Bus.findByPk(req.params.id);
+        if (!bus) {
+            return res.status(404).json({ error: 'Bus not found' });
+        }
+
+        await bus.destroy();
+        res.status(200).json({ message: 'Bus deleted successfully' });
+    } catch (error) {
+        console.error('Delete bus error:', error);
+        res.status(500).json({ error: 'Error deleting bus' });
+    }
+});
+
+// Get single bus
+router.get('/buses/:id', protect, isAdmin, async (req, res) => {
+    try {
+        const bus = await Bus.findByPk(req.params.id);
+        if (!bus) {
+            return res.status(404).json({ error: 'Bus not found' });
+        }
+        res.json(bus);
+    } catch (error) {
+        console.error('Get bus error:', error);
+        res.status(500).json({ error: 'Error fetching bus' });
     }
 });
 
@@ -146,20 +186,33 @@ router.put('/buses/:id', protect, isAdmin, async (req, res) => {
     try {
         const bus = await Bus.findByPk(req.params.id);
         if (!bus) {
-            req.flash('error_msg', 'Bus not found');
-            return res.redirect('/admin/buses');
+            return res.status(404).json({ error: 'Bus not found' });
         }
 
+        const {
+            busNumber,
+            busName,
+            source,
+            destination,
+            departureTime,
+            arrivalTime,
+            totalSeats,
+            fare,
+            busType,
+            isActive
+        } = req.body;
+
         await bus.update({
-            busNumber: req.body.busNumber,
-            busType: req.body.busType,
-            source: req.body.source,
-            destination: req.body.destination,
-            departureTime: req.body.departureTime,
-            arrivalTime: req.body.arrivalTime,
-            fare: req.body.fare,
-            totalSeats: req.body.totalSeats,
-            availableSeats: req.body.totalSeats
+            busNumber,
+            busName,
+            source,
+            destination,
+            departureTime,
+            arrivalTime,
+            totalSeats: parseInt(totalSeats),
+            fare: parseFloat(fare),
+            busType,
+            isActive: isActive === 'true'
         });
 
         req.flash('success_msg', 'Bus updated successfully');
@@ -171,22 +224,55 @@ router.put('/buses/:id', protect, isAdmin, async (req, res) => {
     }
 });
 
-// Delete bus
-router.delete('/buses/:id', protect, isAdmin, async (req, res) => {
+// Get single user
+router.get('/users/:id', protect, isAdmin, async (req, res) => {
     try {
-        const bus = await Bus.findByPk(req.params.id);
-        if (!bus) {
-            req.flash('error_msg', 'Bus not found');
-            return res.redirect('/admin/buses');
+        const user = await User.findByPk(req.params.id, {
+            attributes: { exclude: ['password'] }
+        });
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        res.json(user);
+    } catch (error) {
+        console.error('Get user error:', error);
+        res.status(500).json({ error: 'Error fetching user' });
+    }
+});
+
+// Update user
+router.put('/users/:id', protect, isAdmin, async (req, res) => {
+    try {
+        const user = await User.findByPk(req.params.id);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
         }
 
-        await bus.destroy();
-        req.flash('success_msg', 'Bus deleted successfully');
-        res.redirect('/admin/buses');
+        const { firstName, lastName, email, phone, role } = req.body;
+
+        // Check if email is being changed and if it already exists
+        if (email !== user.email) {
+            const existingUser = await User.findOne({ where: { email } });
+            if (existingUser) {
+                req.flash('error_msg', 'Email already exists');
+                return res.redirect('/admin/users');
+            }
+        }
+
+        await user.update({
+            firstName,
+            lastName,
+            email,
+            phone,
+            role
+        });
+
+        req.flash('success_msg', 'User updated successfully');
+        res.redirect('/admin/users');
     } catch (error) {
-        console.error('Delete bus error:', error);
-        req.flash('error_msg', 'Error deleting bus');
-        res.redirect('/admin/buses');
+        console.error('Update user error:', error);
+        req.flash('error_msg', 'Error updating user');
+        res.redirect('/admin/users');
     }
 });
 

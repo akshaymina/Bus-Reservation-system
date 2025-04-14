@@ -16,23 +16,45 @@ exports.getAllBuses = async (req, res) => {
         } = req.query;
 
         // Build filter conditions
-        const where = {};
-        if (source) where.source = { [Op.iLike]: `%${source}%` };
-        if (destination) where.destination = { [Op.iLike]: `%${destination}%` };
-        if (busType) where.busType = busType;
+        const where = {
+            isActive: true // Only show active buses
+        };
+
+        // Source and destination search (case-insensitive)
+        if (source) {
+            where.source = {
+                [Op.iLike]: `%${source.trim()}%`
+            };
+        }
+        if (destination) {
+            where.destination = {
+                [Op.iLike]: `%${destination.trim()}%`
+            };
+        }
+
+        // Bus type filter
+        if (busType) {
+            where.busType = busType;
+        }
+
+        // Fare range filter
         if (minFare || maxFare) {
             where.fare = {};
             if (minFare) where.fare[Op.gte] = parseFloat(minFare);
             if (maxFare) where.fare[Op.lte] = parseFloat(maxFare);
         }
+
+        // Date filter
         if (date) {
             const searchDate = new Date(date);
-            searchDate.setHours(0, 0, 0, 0);
-            const nextDay = new Date(searchDate);
-            nextDay.setDate(nextDay.getDate() + 1);
+            const startOfDay = new Date(searchDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            
+            const endOfDay = new Date(searchDate);
+            endOfDay.setHours(23, 59, 59, 999);
+
             where.departureTime = {
-                [Op.gte]: searchDate,
-                [Op.lt]: nextDay
+                [Op.between]: [startOfDay, endOfDay]
             };
         }
 
@@ -45,12 +67,40 @@ exports.getAllBuses = async (req, res) => {
             order: [['departureTime', 'ASC']]
         });
 
+        // Format the buses for display
+        const formattedBuses = rows.map(bus => ({
+            ...bus.toJSON(),
+            formattedDepartureTime: new Date(bus.departureTime).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            }),
+            formattedArrivalTime: new Date(bus.arrivalTime).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            })
+        }));
+
+        // If it's a search request (has source/destination/date), render the search page
+        if (source || destination || date) {
+            return res.render('search', {
+                title: 'Search Results',
+                buses: formattedBuses,
+                source,
+                destination,
+                date,
+                passengers: req.query.passengers || 1
+            });
+        }
+
+        // Otherwise return JSON response
         res.json({
             success: true,
             count,
             totalPages: Math.ceil(count / limit),
             currentPage: parseInt(page),
-            buses: rows
+            buses: formattedBuses
         });
     } catch (error) {
         console.error('Error fetching buses:', error);

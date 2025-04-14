@@ -12,22 +12,22 @@
             <!-- Search Form -->
             <div class="card mb-4">
                 <div class="card-body">
-                    <form action="/buses/search" method="GET" class="row g-3">
+                    <form action="/buses" method="GET" class="row g-3">
                         <div class="col-md-3">
                             <label for="source" class="form-label">From</label>
-                            <input type="text" class="form-control" id="source" name="source" value="<%= locals.source || '' %>" required>
+                            <input type="text" class="form-control" id="source" name="source" value="<%= source || '' %>" required>
                         </div>
                         <div class="col-md-3">
                             <label for="destination" class="form-label">To</label>
-                            <input type="text" class="form-control" id="destination" name="destination" value="<%= locals.destination || '' %>" required>
+                            <input type="text" class="form-control" id="destination" name="destination" value="<%= destination || '' %>" required>
                         </div>
                         <div class="col-md-3">
                             <label for="date" class="form-label">Date</label>
-                            <input type="date" class="form-control" id="date" name="date" value="<%= locals.date || '' %>" required>
+                            <input type="date" class="form-control" id="date" name="date" value="<%= date || '' %>" required>
                         </div>
                         <div class="col-md-3">
                             <label for="passengers" class="form-label">Passengers</label>
-                            <input type="number" class="form-control" id="passengers" name="passengers" min="1" value="<%= locals.passengers || 1 %>" required>
+                            <input type="number" class="form-control" id="passengers" name="passengers" min="1" value="<%= passengers || 1 %>" required>
                         </div>
                         <div class="col-12 text-center">
                             <button type="submit" class="btn btn-primary">Search Buses</button>
@@ -69,7 +69,7 @@
                                             <h4 class="mb-0">₹<%= bus.fare %></h4>
                                             <small class="text-muted">per seat</small>
                                         </div>
-                                        <a href="/bookings/new?busId=<%= bus.id %>&date=<%= locals.date %>&passengers=<%= locals.passengers %>" 
+                                        <a href="/bookings/new?busId=<%= bus.id %>&date=<%= date %>&passengers=<%= passengers %>" 
                                            class="btn btn-primary">
                                             Select Seats
                                         </a>

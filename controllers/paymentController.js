@@ -7,6 +7,7 @@ exports.showPaymentForm = async (req, res) => {
         const booking = await Booking.findByPk(req.params.bookingId, {
             include: [{
                 model: Bus,
+                as: 'bus',
                 attributes: ['busNumber', 'source', 'destination', 'departureTime', 'arrivalTime']
             }]
         });
@@ -30,8 +31,8 @@ exports.showPaymentForm = async (req, res) => {
 
         // Create Stripe payment intent
         const paymentIntent = await stripe.paymentIntents.create({
-            amount: booking.totalAmount * 100, // Convert to cents
-            currency: 'usd',
+            amount: Math.round(booking.totalAmount * 100), // Convert to cents
+            currency: 'inr',
             metadata: {
                 bookingId: booking.id,
                 userId: req.user.id
@@ -39,9 +40,11 @@ exports.showPaymentForm = async (req, res) => {
         });
 
         res.render('payments/checkout', {
+            title: 'Payment Checkout',
             booking,
             clientSecret: paymentIntent.client_secret,
-            stripePublicKey: process.env.STRIPE_PUBLIC_KEY
+            stripePublicKey: process.env.STRIPE_PUBLIC_KEY,
+            user: req.session.user
         });
     } catch (error) {
         console.error('Error showing payment form:', error);
@@ -72,12 +75,17 @@ exports.processPayment = async (req, res) => {
 
             // Update bus seat layout
             const bus = await Bus.findByPk(booking.busId);
-            const seatLayout = JSON.parse(bus.seatLayout);
-            const bookedSeats = JSON.parse(booking.seats);
+            let seatLayout = bus.seatLayout;
             
-            bookedSeats.forEach(seatNumber => {
-                if (seatLayout[seatNumber]) {
-                    seatLayout[seatNumber].status = 'booked';
+            // Parse seatLayout if it's a string
+            if (typeof seatLayout === 'string') {
+                seatLayout = JSON.parse(seatLayout);
+            }
+            
+            // Update seat status
+            booking.seatDetails.forEach(seat => {
+                if (seatLayout[seat.seatNumber]) {
+                    seatLayout[seat.seatNumber].status = 'booked';
                 }
             });
 
@@ -96,19 +104,7 @@ exports.processPayment = async (req, res) => {
 
 // Handle Stripe webhook
 exports.handleWebhook = async (req, res) => {
-    const sig = req.headers['stripe-signature'];
-    let event;
-
-    try {
-        event = stripe.webhooks.constructEvent(
-            req.body,
-            sig,
-            process.env.STRIPE_WEBHOOK_SECRET
-        );
-    } catch (err) {
-        console.error('Webhook Error:', err.message);
-        return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
+    const event = req.stripeEvent;
 
     // Handle the event
     switch (event.type) {
@@ -126,7 +122,7 @@ exports.handleWebhook = async (req, res) => {
                     // Update bus seat layout
                     const bus = await Bus.findByPk(booking.busId);
                     const seatLayout = JSON.parse(bus.seatLayout);
-                    const bookedSeats = JSON.parse(booking.seats);
+                    const bookedSeats = booking.seatDetails.map(s => s.seatNumber);
                     
                     bookedSeats.forEach(seatNumber => {
                         if (seatLayout[seatNumber]) {
@@ -151,4 +147,74 @@ exports.handleWebhook = async (req, res) => {
     }
 
     res.json({ received: true });
+};
+
+// Create payment intent
+exports.createPaymentIntent = async (req, res) => {
+    try {
+        const { bookingId } = req.body;
+        
+        // Get booking details
+        const booking = await Booking.findByPk(bookingId, {
+            include: ['bus']
+        });
+
+        if (!booking) {
+            return res.status(404).json({ error: 'Booking not found' });
+        }
+
+        // Create payment intent
+        const paymentIntent = await stripe.paymentIntents.create({
+            amount: Math.round(booking.totalAmount * 100), // Convert to cents
+            currency: 'inr',
+            metadata: {
+                bookingId: booking.id
+            }
+        });
+
+        res.json({
+            clientSecret: paymentIntent.client_secret
+        });
+    } catch (error) {
+        console.error('Payment intent error:', error);
+        res.status(500).json({ error: 'Error creating payment intent' });
+    }
+};
+
+// Handle successful payment
+exports.handleSuccessfulPayment = async (req, res) => {
+    try {
+        const { bookingId } = req.body;
+        
+        // Update booking status
+        await Booking.update(
+            { status: 'confirmed' },
+            { where: { id: bookingId } }
+        );
+
+        // Redirect to success page
+        res.redirect(`/payments/success/${bookingId}`);
+    } catch (error) {
+        console.error('Payment success error:', error);
+        res.status(500).json({ error: 'Error processing payment' });
+    }
+};
+
+// Handle failed payment
+exports.handleFailedPayment = async (req, res) => {
+    try {
+        const { bookingId } = req.body;
+        
+        // Update booking status
+        await Booking.update(
+            { status: 'cancelled' },
+            { where: { id: bookingId } }
+        );
+
+        // Redirect to failure page
+        res.redirect(`/payments/failure/${bookingId}`);
+    } catch (error) {
+        console.error('Payment failure error:', error);
+        res.status(500).json({ error: 'Error processing payment failure' });
+    }
 }; 

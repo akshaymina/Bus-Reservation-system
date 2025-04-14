@@ -13,18 +13,18 @@
             <div class="card mb-4">
                 <div class="card-body">
                     <h5 class="card-title">Booking Summary</h5>
-                    <h6 class="card-subtitle mb-3 text-muted"><%= booking.Bus.busNumber %></h6>
+                    <h6 class="card-subtitle mb-3 text-muted"><%= booking.bus.busNumber %></h6>
                     
                     <div class="mb-3">
-                        <p><strong>From:</strong> <%= booking.Bus.source %></p>
-                        <p><strong>To:</strong> <%= booking.Bus.destination %></p>
-                        <p><strong>Departure:</strong> <%= new Date(booking.Bus.departureTime).toLocaleString() %></p>
-                        <p><strong>Arrival:</strong> <%= new Date(booking.Bus.arrivalTime).toLocaleString() %></p>
+                        <p><strong>From:</strong> <%= booking.bus.source %></p>
+                        <p><strong>To:</strong> <%= booking.bus.destination %></p>
+                        <p><strong>Departure:</strong> <%= new Date(booking.bus.departureTime).toLocaleString() %></p>
+                        <p><strong>Arrival:</strong> <%= new Date(booking.bus.arrivalTime).toLocaleString() %></p>
                     </div>
 
                     <div class="mb-3">
-                        <p><strong>Seats:</strong> <%= JSON.parse(booking.seats).join(', ') %></p>
-                        <p><strong>Total Amount:</strong> $<%= booking.totalAmount %></p>
+                        <p><strong>Seats:</strong> <%= booking.seatDetails.map(s => s.seatNumber).join(', ') %></p>
+                        <p><strong>Total Amount:</strong> ₹<%= booking.totalAmount %></p>
                     </div>
                 </div>
             </div>
@@ -33,16 +33,15 @@
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Passenger Details</h5>
-                    <% const passengers = JSON.parse(booking.passengerDetails); %>
-                    <% passengers.forEach((passenger, index) => { %>
+                    <% booking.seatDetails.forEach((seat, index) => { %>
                         <div class="mb-3">
                             <h6>Passenger <%= index + 1 %></h6>
-                            <p class="mb-1"><strong>Name:</strong> <%= passenger.name %></p>
-                            <p class="mb-1"><strong>Age:</strong> <%= passenger.age %></p>
-                            <p class="mb-1"><strong>Gender:</strong> <%= passenger.gender %></p>
-                            <p class="mb-1"><strong>Seat:</strong> <%= passenger.seatNumber %></p>
+                            <p class="mb-1"><strong>Name:</strong> <%= seat.passengerName %></p>
+                            <p class="mb-1"><strong>Age:</strong> <%= seat.passengerAge %></p>
+                            <p class="mb-1"><strong>Gender:</strong> <%= seat.passengerGender %></p>
+                            <p class="mb-1"><strong>Seat:</strong> <%= seat.seatNumber %></p>
                         </div>
-                        <% if (index < passengers.length - 1) { %>
+                        <% if (index < booking.seatDetails.length - 1) { %>
                             <hr>
                         <% } %>
                     <% }) %>
@@ -64,7 +63,7 @@
 
                         <div class="d-grid gap-2">
                             <button type="submit" class="btn btn-primary" id="submit-button">
-                                Pay $<%= booking.totalAmount %>
+                                Pay ₹<%= booking.totalAmount %>
                             </button>
                             <a href="/bookings/<%= booking.id %>" class="btn btn-secondary">Cancel</a>
                         </div>
@@ -110,7 +109,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 payment_method: {
                     card: card,
                     billing_details: {
-                        name: '<%= JSON.parse(booking.passengerDetails)[0].name %>'
+                        name: '<%= booking.seatDetails[0].passengerName %>'
                     }
                 }
             });
@@ -120,24 +119,37 @@ document.addEventListener('DOMContentLoaded', function() {
                 errorElement.textContent = error.message;
                 errorElement.style.display = 'block';
                 submitButton.disabled = false;
-                submitButton.textContent = 'Pay $<%= booking.totalAmount %>';
+                submitButton.textContent = 'Pay ₹<%= booking.totalAmount %>';
             } else {
                 // Payment successful, update booking status
-                const response = await fetch('/payments/process/<%= booking.id %>', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        paymentIntentId: paymentIntent.id
-                    })
-                });
+                try {
+                    const response = await fetch('/payments/process/<%= booking.id %>', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            paymentIntentId: paymentIntent.id
+                        })
+                    });
 
-                const result = await response.json();
-                if (result.success) {
-                    window.location.href = '/bookings/<%= booking.id %>?payment=success';
-                } else {
-                    throw new Error('Failed to update booking status');
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+
+                    const result = await response.json();
+                    if (result.success) {
+                        window.location.href = '/payments/success/<%= booking.id %>';
+                    } else {
+                        throw new Error(result.error || 'Failed to update booking status');
+                    }
+                } catch (error) {
+                    console.error('Error updating booking:', error);
+                    const errorElement = document.getElementById('card-errors');
+                    errorElement.textContent = 'Payment successful but failed to update booking. Please contact support.';
+                    errorElement.style.display = 'block';
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Pay ₹<%= booking.totalAmount %>';
                 }
             }
         } catch (error) {
@@ -146,7 +158,7 @@ document.addEventListener('DOMContentLoaded', function() {
             errorElement.textContent = 'An error occurred while processing your payment. Please try again.';
             errorElement.style.display = 'block';
             submitButton.disabled = false;
-            submitButton.textContent = 'Pay $<%= booking.totalAmount %>';
+            submitButton.textContent = 'Pay ₹<%= booking.totalAmount %>';
         }
     });
 });

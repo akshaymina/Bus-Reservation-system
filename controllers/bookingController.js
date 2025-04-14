@@ -129,9 +129,9 @@ exports.showBookingForm = async (req, res) => {
 // Create new booking
 exports.createBooking = async (req, res) => {
     try {
-        const { busId, seats, passengerDetails } = req.body;
+        const { busId, seats, passengerDetails, travelDate } = req.body;
         
-        if (!busId || !seats || !passengerDetails) {
+        if (!busId || !seats || !passengerDetails || !travelDate) {
             req.flash('error_msg', 'Missing required booking information');
             return res.redirect('/search');
         }
@@ -177,12 +177,23 @@ exports.createBooking = async (req, res) => {
             }
         }
 
+        // Prepare seat details
+        const seatDetails = selectedSeats.map((seatNumber, index) => ({
+            seatNumber,
+            seatType: 'standard', // You can make this dynamic based on your bus layout
+            price: bus.fare,
+            passengerName: passengers[index].name,
+            passengerAge: passengers[index].age,
+            passengerGender: passengers[index].gender
+        }));
+
         // Create booking
         const booking = await Booking.create({
             userId: req.user.id,
             busId,
-            seats: selectedSeats,
-            passengerDetails: passengers,
+            travelDate: new Date(travelDate),
+            seatDetails,
+            totalSeats: selectedSeats.length,
             totalAmount: selectedSeats.length * bus.fare,
             status: 'pending'
         });
@@ -198,14 +209,14 @@ exports.createBooking = async (req, res) => {
         });
 
         bus.seatLayout = updatedSeatLayout;
-        bus.bookedSeats = (bus.bookedSeats || 0) + selectedSeats.length;
+        bus.bookedSeats += selectedSeats.length;
         await bus.save();
 
         // Redirect to payment page
-        res.redirect(`/payments/new?bookingId=${booking.id}`);
+        res.redirect(`/payments/checkout/${booking.id}`);
     } catch (error) {
         console.error('Error creating booking:', error);
-        req.flash('error_msg', 'Error creating booking. Please try again.');
+        req.flash('error_msg', 'Error creating booking');
         res.redirect('/search');
     }
 };

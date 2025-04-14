@@ -3,19 +3,34 @@
 <div class="container mt-5">
     <div class="row">
         <div class="col-md-8 mx-auto">
-            <div class="card">
-                <div class="card-header">
-                    <h3>My Profile</h3>
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0">My Profile</h3>
                 </div>
                 <div class="card-body">
                     <% if (messages.success_msg) { %>
-                        <div class="alert alert-success"><%= messages.success_msg %></div>
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <%= messages.success_msg %>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
                     <% } %>
                     <% if (messages.error_msg) { %>
-                        <div class="alert alert-danger"><%= messages.error_msg %></div>
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <%= messages.error_msg %>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
                     <% } %>
 
-                    <form action="/users/profile" method="POST">
+                    <div class="text-center mb-4">
+                        <div class="profile-icon mb-3">
+                            <i class="fas fa-user-circle fa-5x text-primary"></i>
+                        </div>
+                        <h4><%= user.firstName %> <%= user.lastName %></h4>
+                        <p class="text-muted"><%= user.email %></p>
+                    </div>
+
+                    <form action="/auth/profile" method="POST">
+                        <input type="hidden" name="_method" value="PUT">
                         <div class="mb-3">
                             <label for="firstName" class="form-label">First Name</label>
                             <input type="text" class="form-control" id="firstName" name="firstName" value="<%= user.firstName %>" required>
@@ -27,18 +42,20 @@
                         <div class="mb-3">
                             <label for="email" class="form-label">Email</label>
                             <input type="email" class="form-control" id="email" value="<%= user.email %>" readonly>
+                            <small class="text-muted">Email cannot be changed</small>
                         </div>
                         <div class="mb-3">
                             <label for="phone" class="form-label">Phone</label>
                             <input type="tel" class="form-control" id="phone" name="phone" value="<%= user.phone %>" required>
                         </div>
-                        <button type="submit" class="btn btn-primary">Update Profile</button>
+                        <button type="submit" class="btn btn-primary w-100">Update Profile</button>
                     </form>
 
                     <hr class="my-4">
 
-                    <h4>Change Password</h4>
-                    <form action="/users/change-password" method="POST">
+                    <h4 class="mb-3">Change Password</h4>
+                    <form action="/auth/change-password" method="POST">
+                        <input type="hidden" name="_method" value="PUT">
                         <div class="mb-3">
                             <label for="currentPassword" class="form-label">Current Password</label>
                             <input type="password" class="form-control" id="currentPassword" name="currentPassword" required>
@@ -51,12 +68,32 @@
                             <label for="confirmPassword" class="form-label">Confirm New Password</label>
                             <input type="password" class="form-control" id="confirmPassword" name="confirmPassword" required>
                         </div>
-                        <button type="submit" class="btn btn-warning">Change Password</button>
+                        <button type="submit" class="btn btn-warning w-100">Change Password</button>
                     </form>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .profile-icon {
+        width: 100px;
+        height: 100px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .card {
+        border-radius: 10px;
+    }
+    .card-header {
+        border-radius: 10px 10px 0 0 !important;
+    }
+    .form-control:read-only {
+        background-color: #f8f9fa;
+    }
+</style>
 
 <%- include('../partials/footer') %> 

@@ -167,7 +167,11 @@ exports.getProfile = async (req, res) => {
 
         res.render('users/profile', { 
             title: 'My Profile',
-            user: user
+            user: user,
+            messages: {
+                success_msg: req.flash('success_msg'),
+                error_msg: req.flash('error_msg')
+            }
         });
     } catch (error) {
         console.error('Profile error:', error);

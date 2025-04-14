@@ -23,8 +23,4 @@ router.get('/profile', protect, authController.getProfile);
 router.put('/profile', protect, authController.updateProfile);
 router.put('/change-password', protect, authController.changePassword);
 
-// Password reset routes
-router.post('/forgot-password', authController.forgotPassword);
-router.post('/reset-password/:token', authController.resetPassword);
-
-module.exports = router; 
+module.exports = router;

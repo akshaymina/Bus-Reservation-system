@@ -1,112 +1,192 @@
 const express = require('express');
 const router = express.Router();
 const { User, Bus, Booking } = require('../models');
-const { protect, admin } = require('../middleware/auth');
+const { protect, isAdmin } = require('../middleware/auth');
+
+// Admin dashboard - handle both / and /dashboard paths
+router.get(['/', '/dashboard'], protect, isAdmin, async (req, res) => {
+    try {
+        const [users, buses, bookings] = await Promise.all([
+            User.findAll(),
+            Bus.findAll(),
+            Booking.findAll({
+                include: [
+                    { model: User, as: 'user', attributes: ['firstName', 'lastName'] },
+                    { model: Bus, as: 'bus', attributes: ['busName', 'busNumber'] }
+                ],
+                order: [['createdAt', 'DESC']],
+                limit: 5
+            })
+        ]);
+
+        res.render('admin/dashboard', {
+            title: 'Admin Dashboard',
+            users,
+            buses,
+            bookings,
+            messages: {
+                success: res.locals.success_msg,
+                error: res.locals.error_msg || res.locals.error,
+                info: res.locals.info_msg,
+                warning: res.locals.warning_msg
+            }
+        });
+    } catch (error) {
+        console.error('Dashboard error:', error);
+        req.flash('error_msg', 'Error loading dashboard');
+        res.redirect('/');
+    }
+});
+
+// Bus management routes
+router.get('/buses', protect, isAdmin, async (req, res) => {
+    console.log('Accessing bus management');
+    console.log('User:', req.session.user);
+    try {
+        const buses = await Bus.findAll();
+        console.log('Buses:', buses);
+        res.render('admin/buses', { 
+            title: 'Manage Buses', 
+            buses,
+            messages: {
+                success: res.locals.success_msg,
+                error: res.locals.error_msg || res.locals.error,
+                info: res.locals.info_msg,
+                warning: res.locals.warning_msg
+            }
+        });
+    } catch (error) {
+        console.error('Buses error:', error);
+        req.flash('error_msg', 'Error loading buses');
+        res.redirect('/admin');
+    }
+});
 
 // Get all users (admin only)
-router.get('/users', protect, admin, async (req, res) => {
+router.get('/users', protect, isAdmin, async (req, res) => {
+    console.log('Accessing user management');
+    console.log('User:', req.session.user);
     try {
         const users = await User.findAll({
-            attributes: { exclude: ['password'] }
+            attributes: ['id', 'firstName', 'lastName', 'email', 'role', 'createdAt']
         });
-        
-        res.json(users);
-    } catch (error) {
-        console.error('Error fetching users:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
-// Get user by ID (admin only)
-router.get('/users/:id', protect, admin, async (req, res) => {
-    try {
-        const user = await User.findByPk(req.params.id, {
-            attributes: { exclude: ['password'] }
+        console.log('Users:', users);
+        res.render('admin/users', { 
+            title: 'Manage Users', 
+            users,
+            messages: {
+                success: res.locals.success_msg,
+                error: res.locals.error_msg || res.locals.error,
+                info: res.locals.info_msg,
+                warning: res.locals.warning_msg
+            }
         });
-        
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-        
-        res.json(user);
     } catch (error) {
-        console.error('Error fetching user:', error);
-        res.status(500).json({ message: 'Server error' });
+        console.error('Users error:', error);
+        req.flash('error_msg', 'Error loading users');
+        res.redirect('/admin');
     }
 });
 
-// Update user (admin only)
-router.put('/users/:id', protect, admin, async (req, res) => {
+// Get all bookings (admin only)
+router.get('/bookings', protect, isAdmin, async (req, res) => {
+    console.log('Accessing booking management');
+    console.log('User:', req.session.user);
     try {
-        const { name, email, role, isActive } = req.body;
-        
-        const user = await User.findByPk(req.params.id);
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-        
-        // Update user fields
-        if (name) user.name = name;
-        if (email) user.email = email;
-        if (role) user.role = role;
-        if (isActive !== undefined) user.isActive = isActive;
-        
-        await user.save();
-        
-        res.json({ message: 'User updated successfully', user });
-    } catch (error) {
-        console.error('Error updating user:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
-// Delete user (admin only)
-router.delete('/users/:id', protect, admin, async (req, res) => {
-    try {
-        const user = await User.findByPk(req.params.id);
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-        
-        await user.destroy();
-        
-        res.json({ message: 'User deleted successfully' });
-    } catch (error) {
-        console.error('Error deleting user:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
-// Get dashboard stats (admin only)
-router.get('/dashboard', protect, admin, async (req, res) => {
-    try {
-        const totalUsers = await User.count();
-        const totalBuses = await Bus.count();
-        const totalBookings = await Booking.count();
-        const confirmedBookings = await Booking.count({ where: { status: 'confirmed' } });
-        const pendingBookings = await Booking.count({ where: { status: 'pending' } });
-        const cancelledBookings = await Booking.count({ where: { status: 'cancelled' } });
-        
-        // Calculate total revenue
         const bookings = await Booking.findAll({
-            where: { status: 'confirmed' },
-            attributes: ['totalAmount']
+            include: [
+                { model: User, as: 'user' },
+                { model: Bus, as: 'bus' }
+            ],
+            order: [['createdAt', 'DESC']]
         });
-        
-        const totalRevenue = bookings.reduce((sum, booking) => sum + booking.totalAmount, 0);
-        
-        res.json({
-            totalUsers,
-            totalBuses,
-            totalBookings,
-            confirmedBookings,
-            pendingBookings,
-            cancelledBookings,
-            totalRevenue
+        console.log('Bookings:', bookings);
+        res.render('admin/bookings', { 
+            title: 'All Bookings', 
+            bookings,
+            messages: {
+                success: res.locals.success_msg,
+                error: res.locals.error_msg || res.locals.error,
+                info: res.locals.info_msg,
+                warning: res.locals.warning_msg
+            }
         });
     } catch (error) {
-        console.error('Error fetching dashboard stats:', error);
-        res.status(500).json({ message: 'Server error' });
+        console.error('Bookings error:', error);
+        req.flash('error_msg', 'Error loading bookings');
+        res.redirect('/admin');
+    }
+});
+
+// Add new bus
+router.post('/buses', protect, isAdmin, async (req, res) => {
+    try {
+        const bus = await Bus.create({
+            busNumber: req.body.busNumber,
+            busType: req.body.busType,
+            source: req.body.source,
+            destination: req.body.destination,
+            departureTime: req.body.departureTime,
+            arrivalTime: req.body.arrivalTime,
+            fare: req.body.fare,
+            totalSeats: req.body.totalSeats,
+            availableSeats: req.body.totalSeats
+        });
+        req.flash('success_msg', 'Bus added successfully');
+        res.redirect('/admin/buses');
+    } catch (error) {
+        console.error('Add bus error:', error);
+        req.flash('error_msg', 'Error adding bus');
+        res.redirect('/admin/buses');
+    }
+});
+
+// Update bus
+router.put('/buses/:id', protect, isAdmin, async (req, res) => {
+    try {
+        const bus = await Bus.findByPk(req.params.id);
+        if (!bus) {
+            req.flash('error_msg', 'Bus not found');
+            return res.redirect('/admin/buses');
+        }
+
+        await bus.update({
+            busNumber: req.body.busNumber,
+            busType: req.body.busType,
+            source: req.body.source,
+            destination: req.body.destination,
+            departureTime: req.body.departureTime,
+            arrivalTime: req.body.arrivalTime,
+            fare: req.body.fare,
+            totalSeats: req.body.totalSeats,
+            availableSeats: req.body.totalSeats
+        });
+
+        req.flash('success_msg', 'Bus updated successfully');
+        res.redirect('/admin/buses');
+    } catch (error) {
+        console.error('Update bus error:', error);
+        req.flash('error_msg', 'Error updating bus');
+        res.redirect('/admin/buses');
+    }
+});
+
+// Delete bus
+router.delete('/buses/:id', protect, isAdmin, async (req, res) => {
+    try {
+        const bus = await Bus.findByPk(req.params.id);
+        if (!bus) {
+            req.flash('error_msg', 'Bus not found');
+            return res.redirect('/admin/buses');
+        }
+
+        await bus.destroy();
+        req.flash('success_msg', 'Bus deleted successfully');
+        res.redirect('/admin/buses');
+    } catch (error) {
+        console.error('Delete bus error:', error);
+        req.flash('error_msg', 'Error deleting bus');
+        res.redirect('/admin/buses');
     }
 });
 

@@ -1,7 +1,7 @@
 const { User } = require('../models/User');
 
 // Middleware to protect routes
-exports.protect = async (req, res, next) => {
+const protect = async (req, res, next) => {
     try {
         // Check if user is logged in
         if (!req.session.user) {
@@ -35,7 +35,7 @@ exports.protect = async (req, res, next) => {
 };
 
 // Middleware to restrict access to specific roles
-exports.authorize = (...roles) => {
+const authorize = (...roles) => {
     return (req, res, next) => {
         if (!req.session.user || !roles.includes(req.session.user.role)) {
             req.flash('error_msg', 'You do not have permission to access this resource');
@@ -46,10 +46,16 @@ exports.authorize = (...roles) => {
 };
 
 // Middleware to restrict access to admin only
-exports.admin = (req, res, next) => {
+const isAdmin = (req, res, next) => {
     if (!req.session.user || req.session.user.role !== 'admin') {
-        req.flash('error_msg', 'Access denied. Admin privileges required.');
+        req.flash('error_msg', 'You do not have permission to access this resource');
         return res.redirect('/');
     }
     next();
+};
+
+module.exports = {
+    protect,
+    authorize,
+    isAdmin
 }; 
